@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate Dummynation Clone</title>
+<style>
+body {font-family: Arial, sans-serif; background: #cde0f7; color: #333; text-align: center;}
+#game-container {max-width: 1200px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 15px; box-shadow:0 4px 20px rgba(0,0,0,0.3);}
+.stats, .resources, .buildings, #map-container, #achievements, #ai-stats {margin:15px 0;}
+.stats p, .resources p {font-size:16px; margin:3px;}
+button {padding:8px 14px; margin:3px; font-size:14px; border-radius:5px; cursor:pointer;}
+.icon {display:inline-block; width:20px; height:20px; margin-right:5px; vertical-align:middle;}
+#population-icon {background:yellow; border-radius:50%;}
+#army-icon {background:red; border-radius:50%;}
+#food-icon {background:green; border-radius:50%;}
+#wood-icon {background:brown; border-radius:50%;}
+#stone-icon {background:gray; border-radius:50%;}
+#money-icon {background:gold; border-radius:50%;}
+.bar-container {width:150px; height:12px; background:#ccc; border-radius:5px; overflow:hidden; display:inline-block; margin-left:5px;}
+.bar-fill {height:100%; width:0%; background:green; text-align:right; color:white; padding-right:2px; box-sizing:border-box; font-size:10px;}
+#map-container {display:grid; grid-template-columns:repeat(10,50px); grid-gap:2px; justify-content:center; margin-top:10px;}
+.tile {width:50px; height:50px; background:#a0d8f1; border:1px solid #333; cursor:pointer; position:relative;}
+.building {width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-size:12px; color:white; font-weight:bold; border-radius:5px;}
+#achievements-list {margin-top:10px;}
+.achievement {background:#f7d479; border-radius:5px; padding:3px; margin:2px; display:inline-block; font-size:11px;}
+#ai-stats {text-align:left; max-width:1000px; margin:10px auto;}
+.ai {margin:2px 0; font-size:12px;}
+</style>
+</head>
+<body>
+<div id="game-container">
+<h1>Ultimate Dummynation Clone</h1>
+
+<div class="stats">
+<p><span class="icon" id="population-icon"></span> Population: <span id="population">1</span></p>
+<p><span class="icon" id="army-icon"></span> Army: <span id="army">0</span></p>
+</div>
+
+<div class="resources">
+<p><span class="icon" id="money-icon"></span> Money: $<span id="money">0</span></p>
+<p><span class="icon" id="food-icon"></span> Food: <span id="food">0</span><div class="bar-container"><div id="food-bar" class="bar-fill">0%</div></div></p>
+<p><span class="icon" id="wood-icon"></span> Wood: <span id="wood">0</span><div class="bar-container"><div id="wood-bar" class="bar-fill">0%</div></div></p>
+<p><span class="icon" id="stone-icon"></span> Stone: <span id="stone">0</span><div class="bar-container"><div id="stone-bar" class="bar-fill">0%</div></div></p>
+</div>
+
+<div class="buildings">
+<p>Select a building and click a tile:</p>
+<button onclick="selectBuilding('Farm')">Farm ($50)</button>
+<button onclick="selectBuilding('Sawmill')">Sawmill ($50)</button>
+<button onclick="selectBuilding('Quarry')">Quarry ($50)</button>
+<button onclick="selectBuilding('Barracks')">Barracks ($100)</button>
+</div>
+
+<div class="actions">
+<button onclick="collectTaxes()">Collect Taxes</button>
+<button onclick="recruitArmy()">Recruit Army ($50 +10 food)</button>
+<button onclick="expandPopulation()">Expand Population ($100 +20 food)</button>
+<button onclick="triggerRandomEvent()">Random Event</button>
+<button onclick="saveGame()">Save</button>
+<button onclick="loadGame()">Load</button>
+</div>
+
+<div id="map-container"></div>
+
+<div id="ai-stats"><h3>AI Nations</h3></div>
+
+<div id="achievements">
+<h3>Achievements</h3>
+<div id="achievements-list"></div>
+</div>
+</div>
+
+<script>
+let game = {
+money:0, population:1, army:0, food:0, wood:0, stone:0, achievements:[], selectedBuilding:null, map:Array(100).fill(null)
+};
+
+let aiNations = [];
+for(let i=1;i<=10;i++){
+    aiNations.push({name:'AI'+i, money:100, population:5, army:5, food:50, wood:50, stone:50, map:Array(100).fill(null)});
+}
+
+function createMap(){
+    const container=document.getElementById('map-container');
+    container.innerHTML='';
+    for(let i=0;i<100;i++){
+        let tile=document.createElement('div');
+        tile.className='tile';
+        tile.dataset.index=i;
+        tile.addEventListener('click',()=>placeBuilding(i));
+        container.appendChild(tile);
+    }
+}
+createMap();
+
+function updateDisplay(){
+    document.getElementById('money').textContent=game.money;
+    document.getElementById('population').textContent=game.population;
+    document.getElementById('army').textContent=game.army;
+    document.getElementById('food').textContent=game.food;
+    document.getElementById('wood').textContent=game.wood;
+    document.getElementById('stone').textContent=game.stone;
+
+    document.getElementById('food-bar').style.width=Math.min(100,game.food)+'%';
+    document.getElementById('food-bar').textContent=Math.floor(Math.min(100,game.food))+'%';
+    document.getElementById('wood-bar').style.width=Math.min(100,game.wood)+'%';
+    document.getElementById('wood-bar').textContent=Math.floor(Math.min(100,game.wood))+'%';
+    document.getElementById('stone-bar').style.width=Math.min(100,game.stone)+'%';
+    document.getElementById('stone-bar').textContent=Math.floor(Math.min(100,game.stone))+'%';
+
+    game.map.forEach((b,i)=>{
+        let tile=document.querySelector(`.tile[data-index="${i}"]`);
+        tile.innerHTML='';
+        if(b){
+            let div=document.createElement('div');
+            div.className='building';
+            div.textContent=b.type+' L'+b.level;
+            div.style.backgroundColor={'Farm':'green','Sawmill':'brown','Quarry':'gray','Barracks':'red'}[b.type];
+            tile.appendChild(div);
+        }
+    });
+
+    let aiDiv=document.getElementById('ai-stats');
+    aiDiv.innerHTML='<h3>AI Nations</h3>';
+    aiNations.forEach(ai=>{
+        aiDiv.innerHTML+=`<div class="ai">${ai.name}: Pop:${ai.population} Army:${ai.army} Money:$${ai.money}</div>`;
+    });
+
+    let achDiv=document.getElementById('achievements-list');
+    achDiv.innerHTML='';
+    game.achievements.forEach(a=>{achDiv.innerHTML+=`<div class="achievement">${a}</div>`});
+}
+
+function selectBuilding(type){ game.selectedBuilding=type; alert(`${type} selected. Click tile to place.`); }
+
+function placeBuilding(index){
+    if(!game.selectedBuilding){alert('Select a building first.'); return;}
+    if(game.map[index]){alert('Tile occupied.'); return;}
+    let cost={'Farm':50,'Sawmill':50,'Quarry':50,'Barracks':100}[game.selectedBuilding];
+    if(game.money<cost){alert('Not enough money!'); return;}
+    game.money-=cost;
+    game.map[index]={type:game.selectedBuilding, level:1};
+    checkAchievements();
+    updateDisplay();
+}
+
+// Resource generation
+function generateResources(entity){
+    entity.map.forEach(b=>{
+        if(!b) return;
+        let lvl=b.level;
+        if(b.type==='Farm') entity.food+=5*lvl;
+        if(b.type==='Sawmill') entity.wood+=5*lvl;
+        if(b.type==='Quarry') entity.stone+=5*lvl;
+    });
+}
+
+// Actions
+function collectTaxes(){ let tax=game.population*10; game.money+=tax; alert(`Collected $${tax} taxes!`); checkAchievements(); updateDisplay();}
+function recruitArmy(){ if(game.money>=50 && game.food>=10){ game.money-=50; game.food-=10; game.army+=1; alert('1 soldier recruited!'); checkAchievements();} else alert('Not enough money or food!'); updateDisplay();}
+function expandPopulation(){ if(game.money>=100 && game.food>=20){ game.money-=100; game.food-=20; game.population+=1; alert('Population increased!'); checkAchievements();} else alert('Not enough money or food!'); updateDisplay();}
+
+// Random events
+function triggerRandomEvent(){
+    let event=Math.floor(Math.random()*5);
+    switch(event){
+        case 0: game.money+=100; alert('Wealthy donor gave $100!'); break;
+        case 1: game.food=Math.max(0,game.food-20); alert('Famine! Lost 20 food.'); break;
+        case 2: if(game.army>0){let l=Math.floor(game.army/2); game.army-=l; alert(`${l} soldiers lost to bandits!`);} else alert('Bandits attacked, no army!'); break;
+        case 3: if(game.population>1){game.population--; alert('Disease! Population -1');} break;
+        case 4: game.food+=30; alert('Good harvest! +30 food'); break;
+    }
+    updateDisplay();
+}
+
+// Achievements
+function checkAchievements(){
+    if(game.population>=10 && !game.achievements.includes('Population Boom')){ game.achievements.push('Population Boom'); alert('Achievement unlocked: Population Boom!'); }
+    if(game.army>=10 && !game.achievements.includes('Military Might')){ game.achievements.push('Military Might'); alert('Achievement unlocked: Military Might!'); }
+    let farmCount=game.map.filter(b=>b&&b.type==='Farm').length;
+    if(farmCount>=5 && !game.achievements.includes('Farming Empire')){ game.achievements.push('Farming Empire'); alert('Achievement unlocked: Farming Empire!'); }
+}
+
+// Save/Load
+function saveGame(){ localStorage.setItem('dummynationSave',JSON.stringify(game)); localStorage.setItem('aiSave',JSON.stringify(aiNations)); alert('Game saved!'); }
+function loadGame(){ let saved=JSON.parse(localStorage.getItem('dummynationSave')); let aisaved=JSON.parse(localStorage.getItem('aiSave')); if(saved){game=saved; aiNations=aisaved; alert('Game loaded!'); updateDisplay();} else alert('No saved game found!'); }
+
+// AI behavior
+function aiTurn(ai){
+    // Randomly generate resources
+    generateResources(ai);
+    // Expand population randomly
+    if(Math.random()<0.3 && ai.money>=100 && ai.food>=20){ ai.money-=100; ai.food-=20; ai.population+=1;}
+    // Recruit army randomly
+    if(Math.random()<0.4 && ai.money>=50 && ai.food>=10){ ai.money-=50; ai.food-=10; ai.army+=1;}
+    // Randomly build if empty tile exists
+    let emptyIndexes=ai.map.map((b,i)=>b===null?i:null).filter(i=>i!==null);
+    if(emptyIndexes.length>0 && Math.random()<0.5){
+        let bTypes=['Farm','Sawmill','Quarry','Barracks'];
+        let choice=bTypes[Math.floor(Math.random()*bTypes.length)];
+        let cost={'Farm':50,'Sawmill':50,'Quarry':50,'Barracks':100}[choice];
+        if(ai.money>=cost){
+            let idx=emptyIndexes[Math.floor(Math.random()*emptyIndexes.length)];
+            ai.map[idx]={type:choice, level:1};
+            ai.money-=cost;
+        }
+    }
+    // Occasionally attack player if AI army>player army
+    if(ai.army>0 && ai.army>game.army && Math.random()<0.2){
+        resolveCombat(ai, game);
+    }
+}
+
+// Combat
+function resolveCombat(attacker, defender){
+    let attackPower=attacker.army + (attacker.map.filter(b=>b&&b.type==='Barracks').length*2);
+    let defensePower=defender.army + (defender.map.filter(b=>b&&b.type==='Barracks').length*2);
+    if(attackPower>defensePower){
+        let loss=Math.floor(defender.army*0.7);
+        defender.army-=loss;
+        attacker.army-=Math.floor(attacker.army*0.3);
+        alert(`${attacker.name||'AI'} won a battle! Defender lost ${loss} army!`);
+    } else {
+        let loss=Math.floor(attacker.army*0.7);
+        attacker.army-=loss;
+        defender.army-=Math.floor(defender.army*0.3);
+        alert(`${attacker.name||'AI'} lost a battle! Lost ${loss} army.`);
+    }
+    updateDisplay();
+}
+
+// Game loop
+setInterval(()=>{
+    generateResources(game);
+    if(game.food>=game.population) game.food-=game.population;
+    else{ let starved=game.population-game.food; game.population-=starved; game.food=0; alert(`${starved} people starved!`);}
+    aiNations.forEach(ai=>aiTurn(ai));
+    updateDisplay();
+},10000);
+
+updateDisplay();
+</script>
+</body>
+</html>
